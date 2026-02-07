@@ -1,71 +1,63 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const WALLET_REGEX = /^WALLET_[A-Z0-9]{4,8}$/;
 
 export default function Home() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [wallet, setWallet] = useState("");
   const [loading, setLoading] = useState(false);
   const [regMessage, setRegMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
-  const [voteMessage, setVoteMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   const handleRegister = async () => {
-    if (!email || !wallet) {
+    if (loading) return;
+    const cleanEmail = email.trim();
+    const cleanWallet = wallet.trim().toUpperCase();
+
+    if (!cleanEmail || !cleanWallet) {
       setRegMessage({ text: "Please fill in all fields.", type: "error" });
       return;
     }
+    if (!WALLET_REGEX.test(cleanWallet)) {
+      setRegMessage({ text: "Wallet must follow format: WALLET_XXXX", type: "error" });
+      return;
+    }
+
     setLoading(true);
     setRegMessage(null);
-    setVoteMessage(null);
 
     try {
       const res = await fetch(`${API_BASE}/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, wallet }),
+        body: JSON.stringify({ email: cleanEmail, wallet: cleanWallet }),
       });
 
       const data = await res.json();
+
+      if (res.status === 409) {
+        setRegMessage({
+          text: "This wallet address is already registered. Please choose a different WALLET_XXXX.",
+          type: "error",
+        });
+        return;
+      }
 
       if (res.ok) {
         setRegMessage({ text: data.message || "Registration successful!", type: "success" });
+        setTimeout(() => {
+          router.push("/login");
+        }, 1500);
       } else {
         setRegMessage({ text: data.error || "Registration failed.", type: "error" });
       }
-    } catch (error) {
+    } catch (err) {
       setRegMessage({ text: "Network error. Please try again.", type: "error" });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVote = async () => {
-    if (!wallet) {
-      setVoteMessage({ text: "Please enter a wallet address above.", type: "error" });
-      return;
-    }
-    setLoading(true);
-    setVoteMessage(null);
-    setRegMessage(null);
-
-    try {
-      const res = await fetch(`${API_BASE}/vote-attempt`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet }),
-      });
-
-      const data = await res.json();
-
-      if (data.allowed) {
-        setVoteMessage({ text: "✅ Vote accepted and forwarded to blockchain", type: "success" });
-      } else {
-        setVoteMessage({ text: `❌ ${data.reason || "Vote rejected"}`, type: "error" });
-      }
-    } catch (error) {
-      setVoteMessage({ text: "❌ Network error during voting.", type: "error" });
     } finally {
       setLoading(false);
     }
@@ -86,7 +78,7 @@ export default function Home() {
         <div className="rounded-xl bg-white p-8 shadow-lg dark:bg-zinc-800">
           {/* Registration Section */}
           <div className="space-y-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Registration</h2>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">New Student Registration</h2>
             
             <div>
               <label htmlFor="email" className="block text-sm font-medium leading-6 text-gray-900 dark:text-gray-200">
@@ -122,6 +114,9 @@ export default function Home() {
                   className="block w-full rounded-md border-0 py-1.5 pl-3 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 dark:bg-zinc-700 dark:text-white dark:ring-zinc-600 sm:text-sm sm:leading-6"
                 />
               </div>
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                Use demo wallet format: WALLET_XXXX
+              </p>
             </div>
 
             <button
@@ -138,33 +133,14 @@ export default function Home() {
               </div>
             )}
           </div>
-
-          <div className="relative my-8">
-            <div className="absolute inset-0 flex items-center" aria-hidden="true">
-              <div className="w-full border-t border-gray-300 dark:border-zinc-600" />
-            </div>
-            <div className="relative flex justify-center">
-              <span className="bg-white px-2 text-sm text-gray-500 dark:bg-zinc-800 dark:text-gray-400">
-                Voting Section
-              </span>
-            </div>
-          </div>
-
-          {/* Voting Section */}
-          <div className="space-y-6">
-            <button
-              onClick={handleVote}
-              disabled={loading}
-              className="flex w-full justify-center rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? "Processing..." : "Vote"}
-            </button>
-
-            {voteMessage && (
-              <div className={`rounded-md p-4 ${voteMessage.type === 'success' ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                <p className="text-sm font-medium">{voteMessage.text}</p>
-              </div>
-            )}
+          
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Already registered?{" "}
+              <Link href="/login" className="font-semibold text-indigo-600 hover:text-indigo-500">
+                Log in here
+              </Link>
+            </p>
           </div>
         </div>
       </div>
