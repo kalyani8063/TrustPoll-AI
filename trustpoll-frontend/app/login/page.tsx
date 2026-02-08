@@ -52,55 +52,65 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 dark:bg-zinc-900">
-      <div className="w-full max-w-md space-y-8 rounded-xl bg-white p-8 shadow-lg dark:bg-zinc-800">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Student Login</h2>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Enter your credentials to access voting
-          </p>
-        </div>
+    <div className="relative min-h-screen overflow-hidden text-slate-100">
+      <div className="pointer-events-none absolute inset-0 grid-overlay" />
+      <div className="pointer-events-none absolute -top-20 left-10 h-72 w-72 rounded-full bg-sky-500/20 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-20 right-0 h-96 w-96 rounded-full bg-cyan-400/20 blur-3xl" />
+      <div className="mx-auto flex min-h-screen max-w-4xl items-center px-6 py-16">
+        <div className="glass-panel w-full rounded-3xl p-10">
+          <div className="grid gap-8 lg:grid-cols-[1fr_1fr] lg:items-center">
+            <div className="space-y-4">
+              <h2 className="font-display text-3xl font-semibold text-slate-100">Student Login</h2>
+              <p className="text-sm text-slate-400">
+                Verify your wallet and continue to the secure voting space.
+              </p>
+              <div className="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-4 text-sm text-slate-300">
+                Voting is protected by anomaly detection and unique wallet enforcement.
+              </div>
+            </div>
 
-        <div className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-900 dark:text-gray-200">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full rounded-md border-0 py-1.5 pl-3 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-600 dark:bg-zinc-700 dark:text-white dark:ring-zinc-600"
-              placeholder="VIT Email"
-            />
-          </div>
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-300">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="mt-2 block w-full rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
+                  placeholder="VIT Email"
+                />
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-900 dark:text-gray-200">Wallet Address</label>
-            <input
-              type="text"
-              value={wallet}
-              onChange={(e) => setWallet(e.target.value)}
-              className="mt-1 block w-full rounded-md border-0 py-1.5 pl-3 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-600 dark:bg-zinc-700 dark:text-white dark:ring-zinc-600"
-              placeholder="WALLET_XXXX"
-            />
-          </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300">Wallet Address</label>
+                <input
+                  type="text"
+                  value={wallet}
+                  onChange={(e) => setWallet(e.target.value)}
+                  className="mt-2 block w-full rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
+                  placeholder="WALLET_XXXX"
+                />
+              </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+              {error && <p className="text-sm text-rose-300">{error}</p>}
 
-          <button
-            onClick={handleLogin}
-            disabled={loading}
-            className="flex w-full justify-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50"
-          >
-            {loading ? "Logging in..." : "Login"}
-          </button>
+              <button
+                onClick={handleLogin}
+                disabled={loading}
+                className="glow-button inline-flex w-full items-center justify-center rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-sky-400 disabled:opacity-60"
+              >
+                {loading ? "Logging in..." : "Login"}
+              </button>
 
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Don&apos;t have an account?{" "}
-              <Link href="/" className="font-semibold text-indigo-600 hover:text-indigo-500">
-                Register here
-              </Link>
-            </p>
+              <div className="text-center">
+                <p className="text-sm text-slate-400">
+                  Don&apos;t have an account?{" "}
+                  <Link href="/" className="font-semibold text-sky-300 hover:text-sky-200">
+                    Register here
+                  </Link>
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>

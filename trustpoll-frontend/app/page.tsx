@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -11,10 +11,13 @@ export default function Home() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [wallet, setWallet] = useState("");
+  const [otp, setOtp] = useState("");
+  const [step, setStep] = useState<1 | 2>(1);
+  const [cooldown, setCooldown] = useState(0);
   const [loading, setLoading] = useState(false);
   const [regMessage, setRegMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
-  const handleRegister = async () => {
+  const handleStartVerification = async () => {
     if (loading) return;
     const cleanEmail = email.trim();
     const cleanWallet = wallet.trim().toUpperCase();
@@ -32,7 +35,7 @@ export default function Home() {
     setRegMessage(null);
 
     try {
-      const res = await fetch(`${API_BASE}/register`, {
+      const res = await fetch(`${API_BASE}/register/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: cleanEmail, wallet: cleanWallet }),
@@ -40,21 +43,12 @@ export default function Home() {
 
       const data = await res.json();
 
-      if (res.status === 409) {
-        setRegMessage({
-          text: "This wallet address is already registered. Please choose a different WALLET_XXXX.",
-          type: "error",
-        });
-        return;
-      }
-
       if (res.ok) {
-        setRegMessage({ text: data.message || "Registration successful!", type: "success" });
-        setTimeout(() => {
-          router.push("/login");
-        }, 1500);
+        setRegMessage({ text: data.message || "Verification code sent.", type: "success" });
+        setStep(2);
+        setCooldown(30);
       } else {
-        setRegMessage({ text: data.error || "Registration failed.", type: "error" });
+        setRegMessage({ text: data.error || "Failed to send verification code.", type: "error" });
       }
     } catch (err) {
       setRegMessage({ text: "Network error. Please try again.", type: "error" });
@@ -63,84 +57,204 @@ export default function Home() {
     }
   };
 
+  const handleVerify = async () => {
+    if (loading) return;
+    const cleanEmail = email.trim();
+    const cleanWallet = wallet.trim().toUpperCase();
+    const cleanOtp = otp.trim();
+
+    if (!cleanOtp) {
+      setRegMessage({ text: "Please enter the verification code.", type: "error" });
+      return;
+    }
+
+    setLoading(true);
+    setRegMessage(null);
+
+    try {
+      const res = await fetch(`${API_BASE}/register/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail, wallet: cleanWallet, otp: cleanOtp }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setRegMessage({ text: data.message || "Registration complete!", type: "success" });
+        setTimeout(() => {
+          router.push("/login");
+        }, 1500);
+      } else {
+        setRegMessage({ text: data.error || "Verification failed.", type: "error" });
+      }
+    } catch {
+      setRegMessage({ text: "Network error. Please try again.", type: "error" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown((v) => v - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 py-12 dark:bg-zinc-900 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900 dark:text-white">
-            TrustPoll
-          </h1>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Decentralized campus voting using Blockchain + AI monitoring
-          </p>
-        </div>
-
-        <div className="rounded-xl bg-white p-8 shadow-lg dark:bg-zinc-800">
-          {/* Registration Section */}
-          <div className="space-y-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">New Student Registration</h2>
-            
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium leading-6 text-gray-900 dark:text-gray-200">
-                Email Address
-              </label>
-              <div className="mt-2">
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  placeholder="VIT Email (@vit.edu)"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full rounded-md border-0 py-1.5 pl-3 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 dark:bg-zinc-700 dark:text-white dark:ring-zinc-600 sm:text-sm sm:leading-6"
-                />
-              </div>
+    <div className="relative min-h-screen overflow-hidden text-slate-100">
+      <div className="pointer-events-none absolute inset-0 grid-overlay" />
+      <div className="pointer-events-none absolute -top-24 right-0 h-80 w-80 rounded-full bg-sky-500/20 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-24 left-10 h-96 w-96 rounded-full bg-cyan-400/20 blur-3xl" />
+      <div className="mx-auto flex min-h-screen max-w-6xl items-center px-6 py-16">
+        <div className="grid w-full gap-10 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="space-y-8">
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-700/60 bg-slate-900/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300 shadow-sm">
+              TrustPoll Protocol
+              <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
             </div>
-
-            <div>
-              <label htmlFor="wallet" className="block text-sm font-medium leading-6 text-gray-900 dark:text-gray-200">
-                Wallet Address
-              </label>
-              <div className="mt-2">
-                <input
-                  id="wallet"
-                  name="wallet"
-                  type="text"
-                  required
-                  placeholder="Wallet Address"
-                  value={wallet}
-                  onChange={(e) => setWallet(e.target.value)}
-                  className="block w-full rounded-md border-0 py-1.5 pl-3 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 dark:bg-zinc-700 dark:text-white dark:ring-zinc-600 sm:text-sm sm:leading-6"
-                />
-              </div>
-              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                Use demo wallet format: WALLET_XXXX
+            <div className="space-y-4">
+              <h1 className="font-display text-4xl font-semibold tracking-tight text-slate-100 sm:text-5xl">
+                Campus voting with verifiable trust and AI oversight.
+              </h1>
+              <p className="max-w-xl text-base text-slate-300 sm:text-lg">
+                A blockchain-inspired ballot experience with rapid anomaly detection. Every vote is
+                accountable, transparent, and protected from abuse.
               </p>
             </div>
-
-            <button
-              onClick={handleRegister}
-              disabled={loading}
-              className="flex w-full justify-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? "Processing..." : "Register"}
-            </button>
-
-            {regMessage && (
-              <div className={`rounded-md p-4 ${regMessage.type === 'success' ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                <p className="text-sm font-medium">{regMessage.text}</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-4 shadow-sm">
+                <p className="text-sm font-semibold text-slate-100">Wallet-linked identity</p>
+                <p className="mt-1 text-sm text-slate-400">One wallet, one vote, enforced by policy.</p>
               </div>
-            )}
+              <div className="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-4 shadow-sm">
+                <p className="text-sm font-semibold text-slate-100">AI anomaly monitoring</p>
+                <p className="mt-1 text-sm text-slate-400">Flags rapid or suspicious attempts.</p>
+              </div>
+            </div>
           </div>
-          
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Already registered?{" "}
-              <Link href="/login" className="font-semibold text-indigo-600 hover:text-indigo-500">
-                Log in here
-              </Link>
-            </p>
+
+          <div className="glass-panel rounded-3xl p-8">
+            <div className="space-y-6">
+              <div>
+                <h2 className="font-display text-2xl font-semibold text-slate-100">
+                  New Student Registration
+                </h2>
+                <p className="mt-2 text-sm text-slate-400">
+                  Register your VIT email and wallet to access the ballot.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                <span className={`rounded-full px-3 py-1 ${step === 1 ? "bg-sky-500/20 text-sky-200" : "bg-slate-800/70"}`}>
+                  Step 1: Email
+                </span>
+                <span className={`rounded-full px-3 py-1 ${step === 2 ? "bg-sky-500/20 text-sky-200" : "bg-slate-800/70"}`}>
+                  Step 2: OTP
+                </span>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-slate-300">
+                    Email Address
+                  </label>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    required
+                    placeholder="VIT Email (@vit.edu)"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="mt-2 block w-full rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="wallet" className="block text-sm font-medium text-slate-300">
+                    Wallet Address
+                  </label>
+                  <input
+                    id="wallet"
+                    name="wallet"
+                    type="text"
+                    required
+                    placeholder="WALLET_XXXX"
+                    value={wallet}
+                    onChange={(e) => setWallet(e.target.value)}
+                    className="mt-2 block w-full rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
+                  />
+                  <p className="mt-2 text-xs text-slate-500">Use demo wallet format: WALLET_XXXX</p>
+                </div>
+                {step === 2 && (
+                  <div>
+                    <label htmlFor="otp" className="block text-sm font-medium text-slate-300">
+                      Verification Code
+                    </label>
+                    <input
+                      id="otp"
+                      name="otp"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="Enter 6-digit code"
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value)}
+                      className="mt-2 block w-full rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {step === 1 ? (
+                <button
+                  onClick={handleStartVerification}
+                  disabled={loading || cooldown > 0}
+                  className="glow-button inline-flex w-full items-center justify-center gap-2 rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {cooldown > 0 ? `Resend in ${cooldown}s` : loading ? "Sending..." : "Send Verification Code"}
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  <button
+                    onClick={handleVerify}
+                    disabled={loading}
+                    className="glow-button inline-flex w-full items-center justify-center gap-2 rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {loading ? "Verifying..." : "Verify & Register"}
+                  </button>
+                  <button
+                    onClick={handleStartVerification}
+                    disabled={loading || cooldown > 0}
+                    className="w-full text-sm font-semibold text-sky-300 transition hover:text-sky-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {cooldown > 0 ? `Resend code in ${cooldown}s` : "Resend verification code"}
+                  </button>
+                </div>
+              )}
+
+              {regMessage && (
+                <div
+                  className={`rounded-xl border px-4 py-3 text-sm font-medium ${
+                    regMessage.type === "success"
+                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                      : "border-rose-500/40 bg-rose-500/10 text-rose-200"
+                  }`}
+                >
+                  {regMessage.text}
+                </div>
+              )}
+
+              <div className="text-center">
+                <p className="text-sm text-slate-400">
+                  Already registered?{" "}
+                  <Link href="/login" className="font-semibold text-sky-300 hover:text-sky-200">
+                    Log in here
+                  </Link>
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
