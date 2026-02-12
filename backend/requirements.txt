@@ -1,5 +1,3 @@
-flask
-psycopg2-binary
 python-dotenv
 flask-cors
 py-algorand-sdk

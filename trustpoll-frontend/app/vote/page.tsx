@@ -109,8 +109,28 @@ export default function VotePage() {
 
     setLoading(true);
     setStatus(null);
-
     try {
+      const attemptRes = await fetch(`${API_BASE}/vote-attempt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          candidate_id: selectedCandidate,
+          election_id: "demo-1",
+          ip_hash: "client",
+          device_fingerprint_hash: "client",
+        }),
+      });
+
+      const attemptData = await attemptRes.json();
+      if (!attemptRes.ok || attemptData.status !== "accepted") {
+        setStatus({
+          type: "error",
+          text: attemptData.reason || "Vote rejected by integrity checks.",
+        });
+        return;
+      }
+
       const voteRes = await fetch(`${API_BASE}/vote`, {
         method: "POST",
         headers: {
@@ -166,8 +186,10 @@ export default function VotePage() {
   return (
     <div className="relative min-h-screen overflow-hidden text-slate-100">
       <div className="pointer-events-none absolute inset-0 grid-overlay" />
-      <div className="pointer-events-none absolute -top-24 left-0 h-80 w-80 rounded-full bg-sky-500/20 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-24 right-10 h-96 w-96 rounded-full bg-cyan-400/20 blur-3xl" />
+      <div className="pointer-events-none absolute inset-0 noise-overlay" />
+      <div className="pointer-events-none absolute -top-24 left-0 h-80 w-80 rounded-full bg-cyan-500/10 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-24 right-10 h-96 w-96 rounded-full bg-violet-500/10 blur-3xl" />
+      <div className="pointer-events-none absolute right-[20%] top-[15%] h-64 w-64 rounded-full aurora" />
       <div className="mx-auto flex min-h-screen max-w-5xl items-center px-6 py-16">
         <div className="w-full space-y-8">
           <div className="glass-panel flex flex-col gap-4 rounded-3xl p-8 sm:flex-row sm:items-center sm:justify-between">
@@ -187,9 +209,7 @@ export default function VotePage() {
 
           <div className="glass-panel rounded-3xl p-8">
             <div className="flex items-center justify-between">
-              <h2 className="font-display text-2xl font-semibold text-slate-100">
-                Select a Candidate
-              </h2>
+              <h2 className="font-display text-2xl font-semibold text-slate-100">Select a Candidate</h2>
               <span className="rounded-full bg-slate-800/80 px-3 py-1 text-xs font-semibold text-slate-300">
                 {candidates.length} options
               </span>
@@ -206,8 +226,8 @@ export default function VotePage() {
                       key={candidate.id}
                       className={`flex items-center gap-3 rounded-2xl border px-4 py-4 text-sm font-medium transition ${
                         isSelected
-                          ? "border-sky-400/80 bg-sky-500/10 text-sky-100 shadow-sm"
-                          : "border-slate-700/70 bg-slate-900/60 text-slate-300 hover:border-sky-400/60"
+                          ? "border-amber-400/80 bg-amber-400/10 text-amber-100 shadow-sm"
+                          : "border-slate-700/70 bg-slate-900/60 text-slate-300 hover:border-sky-400/60 hover:bg-slate-900/80"
                       }`}
                     >
                       <input

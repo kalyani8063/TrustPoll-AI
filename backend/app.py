@@ -1,4 +1,4 @@
-import hashlib
+﻿import hashlib
 import json
 import os
 import random
@@ -78,6 +78,7 @@ def ensure_schema() -> None:
                 password_hash TEXT,
                 blocked_until TIMESTAMP,
                 email_verified BOOLEAN DEFAULT FALSE,
+                has_voted BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT NOW()
             );
 
@@ -118,6 +119,8 @@ def ensure_schema() -> None:
                 wallet TEXT NOT NULL,
                 election_id TEXT,
                 result TEXT NOT NULL,
+                ip_hash TEXT,
+                device_fingerprint_hash TEXT,
                 timestamp TIMESTAMP DEFAULT NOW()
             );
 
@@ -523,13 +526,10 @@ def register_verify():
     record = OTP_STORE.get(key)
     if not record:
         return jsonify({"error": "Verification code not found. Please request a new code."}), 400
-
     if record["attempts"] >= OTP_MAX_ATTEMPTS:
         return jsonify({"error": "Too many attempts. Please request a new code."}), 429
-
     if datetime.utcnow() > record["expires_at"]:
         return jsonify({"error": "Verification code expired. Please request a new code."}), 400
-
     if otp != record["otp"]:
         record["attempts"] += 1
         return jsonify({"error": "Invalid verification code."}), 400
@@ -539,6 +539,9 @@ def register_verify():
     try:
         conn = get_connection()
         cur = conn.cursor()
+        user_ref = _derive_user_ref(email)
+        password_hash = generate_password_hash(password)
+
         cur.execute(
             "INSERT INTO users (email, wallet, password_hash, email_verified) VALUES (%s, %s, %s, %s)",
             (email, email, password_hash, True),
@@ -559,12 +562,17 @@ def register_verify():
             release_connection(conn)
 
     OTP_STORE.pop(key, None)
+    try:
+        send_registration_success_email(email)
+    except Exception:
+        pass
+
     return jsonify({"message": "Email verified and registration complete"}), 200
 
 
 @app.route("/register", methods=["POST"])
 def register():
-    return jsonify({"error": "Use /register/start and /register/verify for email verification."}), 410
+    return jsonify({"error": "Use /register/start and /register/verify."}), 410
 
 
 @app.route("/login", methods=["POST"])
@@ -645,6 +653,9 @@ def vote():
     }
     vote_hash = sha256_hex(canonical_json(canonical_payload))
 
+    if not email or not candidate_id:
+        return jsonify({"error": "Email and candidate_id are required"}), 400
+
     conn = get_connection()
     cur = conn.cursor()
     try:
@@ -652,7 +663,7 @@ def vote():
         user = cur.fetchone()
         if not user:
             return jsonify({"error": "User not found"}), 404
-        blocked_until, email_verified = user
+        blocked_until, email_verified, has_voted, user_ref = user
         if blocked_until and blocked_until > datetime.utcnow():
             return jsonify({"error": "Account temporarily blocked. Please try again later."}), 403
         if not email_verified:
@@ -960,9 +971,28 @@ def add_candidate():
         return jsonify(err[0]), err[1]
 
     data = request.json or {}
+    admin_id = (data.get("admin_id") or "unknown-admin").strip()
     name = (data.get("name") or "").strip()
     if not name:
         return jsonify({"error": "Candidate name is required"}), 400
+
+    voting_active = _is_voting_window_active()
+    has_anchor = _has_any_anchoring_activity()
+    risk_level = "LOW"
+    event_type = "CANDIDATE_ADDED"
+    if voting_active:
+        risk_level = "HIGH"
+        event_type = "CANDIDATE_ADDED_DURING_VOTING_WINDOW"
+    elif has_anchor:
+        risk_level = "HIGH"
+        event_type = "CANDIDATE_ADDED_AFTER_ANCHORING"
+    log_admin_event(
+        admin_id=admin_id,
+        event_type=event_type,
+        election_id=FAIRNESS_DEFAULT_ELECTION_ID,
+        event_details={"candidate_name": name, "voting_window_active": voting_active, "anchoring_active": has_anchor},
+        risk_level=risk_level,
+    )
 
     conn = get_connection()
     cur = conn.cursor()
@@ -1050,6 +1080,285 @@ def admin_stats():
                 "vote_attempts": vote_attempts_count,
                 "ai_flags": ai_flags,
                 "governance_status": governance_status,
+            }
+        )
+    finally:
+        cur.close()
+        release_connection(conn)
+
+
+@app.route("/admin/fairness-index", methods=["GET", "POST"])
+def admin_fairness_index():
+    if request.method == "GET":
+        election_id = (request.args.get("election_id") or FAIRNESS_DEFAULT_ELECTION_ID).strip()
+        conn = get_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                """
+                SELECT fairness_payload, fairness_hash, fairness_score, algorand_tx_id, computed_at
+                FROM fairness_reports
+                WHERE election_id = %s
+                ORDER BY computed_at DESC
+                LIMIT 1
+                """,
+                (election_id,),
+            )
+            row = cur.fetchone()
+        finally:
+            cur.close()
+            release_connection(conn)
+
+        if not row:
+            payload = _compute_fairness_index(election_id)
+            return jsonify(
+                {
+                    "election_id": election_id,
+                    "fairness_score": payload["fairness_score"],
+                    "metrics": payload["metrics"],
+                    "penalties": payload["penalties"],
+                    "formula": payload["formula"],
+                    "governance": payload.get("governance", {}),
+                    "governance_risk_flag": bool(payload.get("governance_risk_flag")),
+                    "fairness_hash": _deterministic_hash(payload),
+                    "algorand_tx_id": None,
+                    "anchored": False,
+                    "computed_at": payload["computed_at"],
+                }
+            )
+
+        payload, fairness_hash, fairness_score, algorand_tx_id, computed_at = row
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        return jsonify(
+            {
+                "election_id": election_id,
+                "fairness_score": float(fairness_score),
+                "metrics": payload.get("metrics", {}),
+                "penalties": payload.get("penalties", {}),
+                "formula": payload.get("formula", {}),
+                "governance": payload.get("governance", {}),
+                "governance_risk_flag": bool(payload.get("governance_risk_flag")),
+                "fairness_hash": fairness_hash,
+                "algorand_tx_id": algorand_tx_id,
+                "anchored": bool(algorand_tx_id),
+                "computed_at": computed_at.isoformat() if computed_at else None,
+            }
+        )
+
+    data = request.json or {}
+    election_id = (data.get("election_id") or FAIRNESS_DEFAULT_ELECTION_ID).strip()
+    should_anchor = bool(data.get("anchor", True))
+    admin_id = (data.get("admin_id") or "unknown-admin").strip()
+    payload = _compute_fairness_index(election_id)
+    fairness_hash = _deterministic_hash(payload)
+    algorand_tx_id = None
+
+    if should_anchor:
+        try:
+            algorand_tx_id = anchor_decision_hash(fairness_hash, voter_ref=f"fairness:{election_id}")
+        except Exception:
+            algorand_tx_id = None
+
+    log_admin_event(
+        admin_id=admin_id,
+        event_type="FAIRNESS_INDEX_COMPUTED",
+        election_id=election_id,
+        event_details={"anchoring_requested": should_anchor, "anchored": bool(algorand_tx_id), "fairness_hash": fairness_hash},
+        risk_level="MEDIUM",
+    )
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            INSERT INTO fairness_reports (election_id, fairness_payload, fairness_hash, fairness_score, algorand_tx_id)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (election_id, json.dumps(payload, sort_keys=True), fairness_hash, payload["fairness_score"], algorand_tx_id),
+        )
+        conn.commit()
+    finally:
+        cur.close()
+        release_connection(conn)
+
+    return jsonify(
+        {
+            "election_id": election_id,
+            "fairness_score": payload["fairness_score"],
+            "metrics": payload["metrics"],
+            "penalties": payload["penalties"],
+            "formula": payload["formula"],
+            "governance": payload.get("governance", {}),
+            "governance_risk_flag": bool(payload.get("governance_risk_flag")),
+            "fairness_hash": fairness_hash,
+            "algorand_tx_id": algorand_tx_id,
+            "anchored": bool(algorand_tx_id),
+            "computed_at": payload["computed_at"],
+        }
+    )
+
+
+@app.route("/admin/delete-candidate", methods=["POST"])
+def delete_candidate():
+    data = request.json or {}
+    admin_id = (data.get("admin_id") or "unknown-admin").strip()
+    candidate_id = data.get("id")
+    if not candidate_id:
+        return jsonify({"error": "Candidate id is required"}), 400
+
+    voting_active = _is_voting_window_active()
+    has_anchor = _has_any_anchoring_activity()
+    risk_level = "MEDIUM"
+    event_type = "CANDIDATE_DELETED"
+    if voting_active:
+        risk_level = "CRITICAL"
+        event_type = "CANDIDATE_DELETED_DURING_VOTING_WINDOW"
+    elif has_anchor:
+        risk_level = "HIGH"
+        event_type = "CANDIDATE_DELETED_AFTER_ANCHORING"
+    log_admin_event(
+        admin_id=admin_id,
+        event_type=event_type,
+        election_id=FAIRNESS_DEFAULT_ELECTION_ID,
+        event_details={"candidate_id": candidate_id, "voting_window_active": voting_active, "anchoring_active": has_anchor},
+        risk_level=risk_level,
+    )
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM candidates WHERE id = %s", (candidate_id,))
+        if cur.rowcount == 0:
+            return jsonify({"error": "Candidate not found"}), 404
+        conn.commit()
+        return jsonify({"message": "Candidate deleted"})
+    finally:
+        cur.close()
+        release_connection(conn)
+
+
+@app.route("/admin/results-status", methods=["GET"])
+def admin_results_status():
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT published, published_at FROM results_publication WHERE id = 1")
+        row = cur.fetchone()
+        published = bool(row[0]) if row else False
+        published_at = row[1].isoformat() if row and row[1] else None
+        return jsonify({"published": published, "published_at": published_at})
+    finally:
+        cur.close()
+        release_connection(conn)
+
+
+@app.route("/admin/publish-results", methods=["POST"])
+def admin_publish_results():
+    data = request.json or {}
+    admin_id = (data.get("admin_id") or "unknown-admin").strip()
+    publish = bool(data.get("published"))
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT published FROM results_publication WHERE id = 1")
+        row = cur.fetchone()
+        currently_published = bool(row[0]) if row else False
+
+        voting_active = _is_voting_window_active()
+        has_anchor = _has_any_anchoring_activity()
+        risk_level = "LOW"
+        event_type = "ELECTION_STATE_MODIFIED"
+        if voting_active:
+            risk_level = "HIGH"
+            event_type = "ELECTION_METADATA_CHANGED_DURING_VOTE_WINDOW"
+        if has_anchor:
+            risk_level = "HIGH"
+            event_type = "ELECTION_STATE_MODIFIED_AFTER_ANCHORING"
+        if currently_published and not publish:
+            risk_level = "CRITICAL"
+            event_type = "RESULTS_UNPUBLISHED_AFTER_PUBLICATION"
+
+        log_admin_event(
+            admin_id=admin_id,
+            event_type=event_type,
+            election_id=FAIRNESS_DEFAULT_ELECTION_ID,
+            event_details={
+                "from_published": currently_published,
+                "to_published": publish,
+                "voting_window_active": voting_active,
+                "anchoring_active": has_anchor,
+            },
+            risk_level=risk_level,
+        )
+
+        if publish:
+            cur.execute("UPDATE results_publication SET published = TRUE, published_at = NOW() WHERE id = 1")
+        else:
+            cur.execute("UPDATE results_publication SET published = FALSE, published_at = NULL WHERE id = 1")
+        conn.commit()
+        return jsonify({"published": publish})
+    finally:
+        cur.close()
+        release_connection(conn)
+
+
+@app.route("/results", methods=["GET"])
+def public_results():
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT published FROM results_publication WHERE id = 1")
+        row = cur.fetchone()
+        if not row or not row[0]:
+            return jsonify({"published": False, "results": []})
+
+        query = """
+            SELECT c.id, c.name, COUNT(v.wallet)
+            FROM candidates c
+            LEFT JOIN votes v ON c.id = v.candidate_id
+            GROUP BY c.id
+            ORDER BY COUNT(v.wallet) DESC, c.name
+        """
+        cur.execute(query)
+        rows = cur.fetchall()
+        results = [{"id": r[0], "name": r[1], "votes": r[2]} for r in rows]
+        governance_summary = get_governance_audit_summary(FAIRNESS_DEFAULT_ELECTION_ID)
+        governance_compromised = governance_summary.get("governance_integrity_status") == "COMPROMISED"
+        cur.execute(
+            """
+            SELECT fairness_payload, fairness_hash, fairness_score, algorand_tx_id, computed_at
+            FROM fairness_reports
+            WHERE election_id = %s
+            ORDER BY computed_at DESC
+            LIMIT 1
+            """,
+            (FAIRNESS_DEFAULT_ELECTION_ID,),
+        )
+        fairness_row = cur.fetchone()
+        fairness_public = None
+        if fairness_row:
+            fairness_payload, fairness_hash, fairness_score, fairness_tx_id, fairness_computed_at = fairness_row
+            if isinstance(fairness_payload, str):
+                fairness_payload = json.loads(fairness_payload)
+            fairness_public = {
+                "fairness_score": float(fairness_score),
+                "formula": fairness_payload.get("formula", {}),
+                "metrics": fairness_payload.get("metrics", {}),
+                "governance_risk_flag": bool(fairness_payload.get("governance_risk_flag")),
+                "fairness_hash": fairness_hash,
+                "algorand_tx_id": fairness_tx_id,
+                "computed_at": fairness_computed_at.isoformat() if fairness_computed_at else None,
+            }
+        return jsonify(
+            {
+                "published": True,
+                "results": results,
+                "fairness_index": fairness_public,
+                "governance_integrity_audit": governance_summary,
+                "governance_integrity_status": "COMPROMISED" if governance_compromised else "HEALTHY",
+                "governance_warning": "Governance Integrity Compromised" if governance_compromised else None,
             }
         )
     finally:
@@ -1159,6 +1468,20 @@ def admin_block_email():
     if minutes <= 0:
         return jsonify({"error": "Minutes must be positive"}), 400
 
+    voting_active = _is_voting_window_active()
+    risk_level = "MEDIUM"
+    event_type = "USER_BLOCKED_BY_ADMIN"
+    if voting_active:
+        risk_level = "HIGH"
+        event_type = "USER_BLOCKED_DURING_VOTING_WINDOW"
+    log_admin_event(
+        admin_id=admin_id,
+        event_type=event_type,
+        election_id=FAIRNESS_DEFAULT_ELECTION_ID,
+        event_details={"user_key": wallet, "minutes": minutes},
+        risk_level=risk_level,
+    )
+
     conn = get_connection()
     cur = conn.cursor()
     try:
@@ -1203,6 +1526,37 @@ def health():
     )
 
 
+@app.route("/verify-decision", methods=["POST"])
+def verify_decision():
+    data = request.json or {}
+    tx_id = data.get("tx_id")
+    decision_hash = data.get("decision_hash")
+    voter_ref = data.get("voter_ref") or data.get("wallet")
+    if not tx_id or not decision_hash:
+        return jsonify({"error": "tx_id and decision_hash are required"}), 400
+
+    onchain_note = fetch_tx_note(tx_id)
+    if not onchain_note:
+        return jsonify({"verified": False, "reason": "No note found on transaction"}), 404
+
+    note_voter_ref, note_hash = parse_anchor_note(onchain_note)
+    if note_voter_ref and note_hash:
+        verified = note_hash == decision_hash and (not voter_ref or voter_ref == note_voter_ref)
+    else:
+        verified = onchain_note == decision_hash
+
+    return jsonify(
+        {
+            "verified": verified,
+            "onchain_note": onchain_note,
+            "decision_hash": decision_hash,
+            "note_prefix": ANCHOR_NOTE_PREFIX,
+            "voter_ref_match": (note_voter_ref == voter_ref) if voter_ref and note_voter_ref else None,
+        }
+    )
+
+
 if __name__ == "__main__":
     ensure_schema()
+    _start_governance_monitor_if_needed()
     app.run(debug=True)

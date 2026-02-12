@@ -1,9 +1,10 @@
+import json
+import hashlib
 from db import get_connection, release_connection
 
 def check_anomaly(identity_key):
     conn = get_connection()
     cur = conn.cursor()
-
     try:
         cur.execute("""
             SELECT COUNT(*) 
@@ -17,7 +18,4 @@ def check_anomaly(identity_key):
         cur.close()
         release_connection(conn)
 
-    if count >= 3:
-        return True, "Rapid voting attempts detected"
-
-    return False, None
+    return payload, payload_hash

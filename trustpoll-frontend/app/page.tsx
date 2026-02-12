@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
@@ -102,17 +101,21 @@ export default function Home() {
   return (
     <div className="relative min-h-screen overflow-hidden text-slate-100">
       <div className="pointer-events-none absolute inset-0 grid-overlay" />
-      <div className="pointer-events-none absolute -top-24 right-0 h-80 w-80 rounded-full bg-sky-500/20 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-24 left-10 h-96 w-96 rounded-full bg-cyan-400/20 blur-3xl" />
+      <div className="pointer-events-none absolute inset-0 noise-overlay" />
+      <div className="pointer-events-none absolute left-[-10%] top-[-20%] h-96 w-96 rounded-full bg-cyan-400/10 blur-3xl" />
+      <div className="pointer-events-none absolute right-[-10%] top-[10%] h-[28rem] w-[28rem] rounded-full bg-amber-300/10 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-[-10%] left-[20%] h-[24rem] w-[24rem] rounded-full bg-violet-500/10 blur-3xl" />
+      <div className="pointer-events-none absolute right-[10%] top-[25%] h-64 w-64 rounded-full aurora" />
+
       <div className="mx-auto flex min-h-screen max-w-6xl items-center px-6 py-16">
-        <div className="grid w-full gap-10 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="grid w-full gap-12 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-8">
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-700/60 bg-slate-900/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300 shadow-sm">
+            <div className="inline-flex items-center gap-3 rounded-full border border-slate-700/60 bg-slate-950/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-slate-300 shadow-sm fade-in-up">
               TrustPoll Protocol
-              <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+              <span className="h-1.5 w-6 rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300" />
             </div>
-            <div className="space-y-4">
-              <h1 className="font-display text-4xl font-semibold tracking-tight text-slate-100 sm:text-5xl">
+            <div className="space-y-4 fade-in-up delay-1">
+              <h1 className="font-display text-4xl font-semibold tracking-tight text-slate-100 sm:text-6xl">
                 Campus voting with verifiable trust and AI oversight.
               </h1>
               <p className="max-w-xl text-base text-slate-300 sm:text-lg">
@@ -125,31 +128,42 @@ export default function Home() {
                 <p className="text-sm font-semibold text-slate-100">Email-verified identity</p>
                 <p className="mt-1 text-sm text-slate-400">One verified student, one vote.</p>
               </div>
-              <div className="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-4 shadow-sm">
-                <p className="text-sm font-semibold text-slate-100">AI anomaly monitoring</p>
-                <p className="mt-1 text-sm text-slate-400">Flags rapid or suspicious attempts.</p>
+              <div className="panel rounded-2xl p-5">
+                <p className="text-sm font-semibold text-slate-100">On-chain audit trail</p>
+                <p className="mt-1 text-sm text-slate-400">Every decision hash anchored to Algorand.</p>
               </div>
+            </div>
+            <div className="flex flex-wrap gap-3 text-xs uppercase tracking-[0.2em] text-slate-400 fade-in-up delay-3">
+              <span className="chip rounded-full px-3 py-2">Email OTP</span>
+              <span className="chip rounded-full px-3 py-2">Consensus checks</span>
+              <span className="chip rounded-full px-3 py-2">Tamper detection</span>
             </div>
           </div>
 
-          <div className="glass-panel rounded-3xl p-8">
+          <div className="glass-panel rounded-3xl p-8 shadow-2xl">
             <div className="space-y-6">
               <div>
                 <h2 className="font-display text-2xl font-semibold text-slate-100">
-                  New Student Registration
+                  Start Voting
                 </h2>
                 <p className="mt-2 text-sm text-slate-400">
                   Register your VIT email to access the ballot.
                 </p>
               </div>
 
-              <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                <span className={`rounded-full px-3 py-1 ${step === 1 ? "bg-sky-500/20 text-sky-200" : "bg-slate-800/70"}`}>
-                  Step 1: Email
-                </span>
-                <span className={`rounded-full px-3 py-1 ${step === 2 ? "bg-sky-500/20 text-sky-200" : "bg-slate-800/70"}`}>
-                  Step 2: OTP
-                </span>
+              <div className="space-y-3">
+                <Link
+                  href="/register"
+                  className="glow-button inline-flex w-full items-center justify-center rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-sky-400"
+                >
+                  Register to Vote
+                </Link>
+                <Link
+                  href="/login"
+                  className="inline-flex w-full items-center justify-center rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-sky-400/60"
+                >
+                  Log In
+                </Link>
               </div>
 
               <div className="space-y-4">
@@ -254,6 +268,102 @@ export default function Home() {
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto w-full max-w-6xl px-6 pb-20">
+        <div className="panel-strong rounded-3xl p-8">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h3 className="font-display text-2xl font-semibold text-slate-100">Public Results</h3>
+              <p className="mt-2 text-sm text-slate-400">
+                Results appear only after an admin publishes them.
+              </p>
+            </div>
+            <span className="chip rounded-full px-3 py-2 text-xs uppercase tracking-[0.2em] text-slate-300">
+              Transparency
+            </span>
+          </div>
+
+          <div className="mt-6">
+            {!published && (
+              <div className="rounded-2xl border border-slate-700/70 bg-slate-900/60 px-4 py-6 text-center text-sm text-slate-400">
+                Results are not yet published.
+              </div>
+            )}
+            {published && resultsError && (
+              <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 px-4 py-6 text-center text-sm text-rose-200">
+                {resultsError}
+              </div>
+            )}
+            {published && !resultsError && (
+              <div className="space-y-6">
+                {governanceWarning && (
+                  <div className="rounded-2xl border border-rose-500/50 bg-rose-500/10 px-4 py-4 text-sm font-semibold text-rose-200">
+                    ⚠ Governance Integrity Compromised
+                  </div>
+                )}
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  {results.length === 0 ? (
+                    <div className="rounded-2xl border border-slate-700/70 bg-slate-900/60 px-4 py-6 text-center text-sm text-slate-400">
+                      No votes recorded yet.
+                    </div>
+                  ) : (
+                    results.map((entry) => (
+                      <div key={entry.id} className="rounded-2xl border border-slate-700/70 bg-slate-900/60 px-4 py-4">
+                        <p className="text-sm font-semibold text-slate-100">{entry.name}</p>
+                        <p className="mt-2 text-xs uppercase tracking-[0.2em] text-slate-400">
+                          Votes
+                        </p>
+                        <p className="mt-1 text-2xl font-semibold text-emerald-200">{entry.votes}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="rounded-2xl border border-slate-700/70 bg-slate-900/60 px-4 py-4">
+                  <h4 className="text-sm font-semibold text-slate-100">Governance Integrity Audit</h4>
+                  {!governanceAudit ? (
+                    <p className="mt-2 text-sm text-slate-400">Governance audit data not available yet.</p>
+                  ) : (
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <p className="text-sm text-slate-300">Total admin high-risk events: <span className="font-semibold text-slate-100">{governanceAudit.total_admin_high_risk_events}</span></p>
+                      <p className="text-sm text-slate-300">Total critical events: <span className="font-semibold text-slate-100">{governanceAudit.total_admin_critical_events}</span></p>
+                      <p className="text-sm text-slate-300">Blockchain verification: <span className="font-semibold text-slate-100">{governanceAudit.blockchain_verification_status}</span></p>
+                      <p className="text-sm text-slate-300">Tampering detection: <span className="font-semibold text-slate-100">{governanceAudit.tampering_detection_result}</span></p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-2xl border border-slate-700/70 bg-slate-900/60 px-4 py-4">
+                  <h4 className="text-sm font-semibold text-slate-100">Election Fairness Index</h4>
+                  {!fairnessIndex ? (
+                    <p className="mt-2 text-sm text-slate-400">Fairness index has not been generated yet.</p>
+                  ) : (
+                    <div className="mt-3 space-y-3">
+                      <p className="text-3xl font-semibold text-emerald-200">{fairnessIndex.fairness_score.toFixed(1)}%</p>
+                      <p className="text-xs text-slate-400">{fairnessIndex.formula?.equation || "Transparent scoring formula applied."}</p>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <p className="text-sm text-slate-300">Tampering attempts: <span className="font-semibold text-slate-100">{fairnessIndex.metrics?.tampering_attempts_detected ?? 0}</span></p>
+                        <p className="text-sm text-slate-300">Duplicate blocked: <span className="font-semibold text-slate-100">{fairnessIndex.metrics?.duplicate_attempts_blocked ?? 0}</span></p>
+                        <p className="text-sm text-slate-300">Timing clusters: <span className="font-semibold text-slate-100">{fairnessIndex.metrics?.abnormal_timing_clusters ?? 0}</span></p>
+                        <p className="text-sm text-slate-300">Suspicious IP clusters: <span className="font-semibold text-slate-100">{fairnessIndex.metrics?.suspicious_ip_clusters ?? 0}</span></p>
+                        <p className="text-sm text-slate-300">Admin high-risk events: <span className="font-semibold text-slate-100">{fairnessIndex.metrics?.admin_high_risk_events ?? 0}</span></p>
+                        <p className="text-sm text-slate-300">Admin critical events: <span className="font-semibold text-slate-100">{fairnessIndex.metrics?.admin_critical_events ?? 0}</span></p>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        Hash: {fairnessIndex.fairness_hash || "N/A"} | Tx: {fairnessIndex.algorand_tx_id || "Not anchored"} | Computed: {fairnessIndex.computed_at ? new Date(fairnessIndex.computed_at).toLocaleString() : "Unknown"}
+                      </p>
+                      {fairnessIndex.governance_risk_flag && (
+                        <p className="text-xs font-semibold text-rose-300">Governance risk impacted this score.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
