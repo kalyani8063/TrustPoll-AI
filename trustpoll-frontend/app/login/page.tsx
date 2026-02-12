@@ -5,25 +5,24 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-const WALLET_REGEX = /^WALLET_[A-Z0-9]{4,8}$/;
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [wallet, setWallet] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleLogin = async () => {
     const cleanEmail = email.trim();
-    const cleanWallet = wallet.trim();
+    const cleanPassword = password.trim();
 
-    if (!cleanEmail || !cleanWallet) {
-      setError("Please fill in all fields.");
+    if (!cleanEmail) {
+      setError("Please enter your email.");
       return;
     }
-    if (!WALLET_REGEX.test(cleanWallet)) {
-      setError("Wallet must follow format: WALLET_XXXX");
+    if (!cleanPassword) {
+      setError("Please enter your password.");
       return;
     }
 
@@ -34,11 +33,15 @@ export default function LoginPage() {
       const res = await fetch(`${API_BASE}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail, wallet: cleanWallet }),
+        body: JSON.stringify({ email: cleanEmail, password: cleanPassword }),
       });
 
       if (res.ok) {
-        localStorage.setItem("user_wallet", cleanWallet);
+        const data = await res.json();
+        localStorage.setItem("user_email", cleanEmail.toLowerCase());
+        if (data.session_token) {
+          localStorage.setItem("session_token", data.session_token);
+        }
         router.push("/vote");
       } else {
         const data = await res.json();
@@ -62,10 +65,10 @@ export default function LoginPage() {
             <div className="space-y-4">
               <h2 className="font-display text-3xl font-semibold text-slate-100">Student Login</h2>
               <p className="text-sm text-slate-400">
-                Verify your wallet and continue to the secure voting space.
+                Verify your email and continue to the secure voting space.
               </p>
               <div className="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-4 text-sm text-slate-300">
-                Voting is protected by anomaly detection and unique wallet enforcement.
+                Voting is protected by anomaly detection and unique email enforcement.
               </div>
             </div>
 
@@ -80,15 +83,14 @@ export default function LoginPage() {
                   placeholder="VIT Email"
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-slate-300">Wallet Address</label>
+                <label className="block text-sm font-medium text-slate-300">Password</label>
                 <input
-                  type="text"
-                  value={wallet}
-                  onChange={(e) => setWallet(e.target.value)}
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="mt-2 block w-full rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
-                  placeholder="WALLET_XXXX"
+                  placeholder="Account password"
                 />
               </div>
 

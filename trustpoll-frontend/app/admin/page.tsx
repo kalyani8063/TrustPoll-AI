@@ -4,15 +4,17 @@ import { useState, useEffect } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 const ADMIN_EMAIL = "kalyani.bhintade@vit.edu";
+const TESTNET_EXPLORER_TX_BASE = "https://testnet.explorer.perawallet.app/tx/";
 
 interface Stats {
   users: number;
   vote_attempts: number;
   ai_flags: number;
+  governance_status?: string;
 }
 
 interface AiFlag {
-  wallet: string;
+  email: string;
   reason: string;
   severity: number;
   created_at: string;
@@ -24,6 +26,16 @@ interface Candidate {
   votes: number;
 }
 
+interface AuditEvent {
+  event_type: string;
+  severity: string;
+  payload: unknown;
+  entry_hash: string;
+  anchored_tx_id: string | null;
+  anchored_round: number | null;
+  created_at: string;
+}
+
 export default function AdminPage() {
   const [email, setEmail] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -31,6 +43,7 @@ export default function AdminPage() {
   
   const [stats, setStats] = useState<Stats | null>(null);
   const [flags, setFlags] = useState<AiFlag[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -52,10 +65,11 @@ export default function AdminPage() {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const [statsRes, flagsRes, candidatesRes] = await Promise.all([
+      const [statsRes, flagsRes, candidatesRes, auditRes] = await Promise.all([
         fetch(`${API_BASE}/admin/stats`),
         fetch(`${API_BASE}/admin/ai-flags`),
-        fetch(`${API_BASE}/admin/candidates`)
+        fetch(`${API_BASE}/results`),
+        fetch(`${API_BASE}/admin/audit-events?limit=100`)
       ]);
 
       if (statsRes.ok) {
@@ -70,7 +84,12 @@ export default function AdminPage() {
 
       if (candidatesRes.ok) {
         const candidatesData = await candidatesRes.json();
-        setCandidates(candidatesData);
+        setCandidates(candidatesData.results || []);
+      }
+
+      if (auditRes.ok) {
+        const auditData = await auditRes.json();
+        setAuditEvents(auditData);
       }
     } catch (error) {
       console.error("Failed to fetch admin data", error);
@@ -79,13 +98,13 @@ export default function AdminPage() {
     }
   };
 
-  const handleAcknowledge = async (wallet: string) => {
-    setActionLoading(wallet);
+  const handleAcknowledge = async (email: string) => {
+    setActionLoading(email);
     try {
       const res = await fetch(`${API_BASE}/admin/acknowledge-flag`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet }),
+        body: JSON.stringify({ email }),
       });
 
       if (res.ok) {
@@ -118,7 +137,10 @@ export default function AdminPage() {
         setCandidateMessage("Candidate added. Voters can refresh to see the update.");
         // Refresh candidates
         const cRes = await fetch(`${API_BASE}/admin/candidates`);
-        if (cRes.ok) setCandidates(await cRes.json());
+        if (cRes.ok) {
+          const payload = await cRes.json();
+          setCandidates(payload.results || payload || []);
+        }
       } else {
         const data = await res.json();
         setCandidateMessage(data.error || "Failed to add candidate.");
@@ -131,24 +153,24 @@ export default function AdminPage() {
     }
   };
 
-  const handleBlockWallet = async (wallet: string) => {
-    setActionLoading(wallet);
+  const handleBlockEmail = async (email: string) => {
+    setActionLoading(email);
     setBlockMessage(null);
     try {
-      const res = await fetch(`${API_BASE}/admin/block-wallet`, {
+      const res = await fetch(`${API_BASE}/admin/block-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet, minutes: 30 }),
+        body: JSON.stringify({ email, minutes: 30 }),
       });
       const data = await res.json();
       if (res.ok) {
-        setBlockMessage(`Wallet blocked until ${new Date(data.blocked_until).toLocaleString()}.`);
+        setBlockMessage(`Email blocked until ${new Date(data.blocked_until).toLocaleString()}.`);
       } else {
-        setBlockMessage(data.error || "Failed to block wallet.");
+        setBlockMessage(data.error || "Failed to block email.");
       }
     } catch (error) {
-      console.error("Failed to block wallet", error);
-      setBlockMessage("Network error while blocking wallet.");
+      console.error("Failed to block email", error);
+      setBlockMessage("Network error while blocking email.");
     } finally {
       setActionLoading(null);
     }
@@ -246,6 +268,10 @@ export default function AdminPage() {
                 <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">AI Flags</dt>
                 <dd className="mt-3 text-3xl font-semibold text-rose-300">{stats?.ai_flags || 0}</dd>
               </div>
+              <div className="glass-panel rounded-3xl p-6 sm:col-span-3">
+                <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Governance Status</dt>
+                <dd className="mt-3 text-2xl font-semibold text-slate-100">{stats?.governance_status || "UNKNOWN"}</dd>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -295,7 +321,7 @@ export default function AdminPage() {
                 <table className="min-w-full divide-y divide-slate-700/70">
                   <thead className="bg-slate-900/70">
                     <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Wallet</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Email</th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Reason</th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Severity</th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Time</th>
@@ -311,9 +337,9 @@ export default function AdminPage() {
                       </tr>
                     ) : (
                       flags.map((flag, idx) => (
-                        <tr key={`${flag.wallet}-${idx}`}>
+                        <tr key={`${flag.email}-${idx}`}>
                           <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-slate-100">
-                            {flag.wallet}
+                            {flag.email}
                           </td>
                           <td className="px-6 py-4 text-sm text-slate-300">
                             {flag.reason}
@@ -329,15 +355,15 @@ export default function AdminPage() {
                           <td className="whitespace-nowrap px-6 py-4 text-sm">
                             <div className="flex flex-wrap items-center gap-2">
                               <button
-                                onClick={() => handleAcknowledge(flag.wallet)}
-                                disabled={actionLoading === flag.wallet}
+                                onClick={() => handleAcknowledge(flag.email)}
+                                disabled={actionLoading === flag.email}
                                 className="rounded-full border border-slate-700/70 bg-slate-900/70 px-3 py-1 text-xs font-semibold text-slate-300 transition hover:text-slate-100 disabled:opacity-50"
                               >
-                                {actionLoading === flag.wallet ? "Processing..." : "Mark as Reviewed"}
+                                {actionLoading === flag.email ? "Processing..." : "Mark as Reviewed"}
                               </button>
                               <button
-                                onClick={() => handleBlockWallet(flag.wallet)}
-                                disabled={actionLoading === flag.wallet}
+                                onClick={() => handleBlockEmail(flag.email)}
+                                disabled={actionLoading === flag.email}
                                 className="rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-200 transition hover:text-rose-100 disabled:opacity-50"
                               >
                                 Block 30m
@@ -355,6 +381,59 @@ export default function AdminPage() {
                   {blockMessage}
                 </div>
               )}
+            </div>
+
+            <div className="glass-panel overflow-hidden rounded-3xl">
+              <div className="border-b border-slate-700/70 px-6 py-4">
+                <h3 className="font-display text-xl font-semibold text-slate-100">Governance Audit Trail</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-700/70">
+                  <thead className="bg-slate-900/70">
+                    <tr>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Type</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Severity</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Entry Hash</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Anchor Tx</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Round</th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Time</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700/70 bg-slate-900/40">
+                    {auditEvents.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-6 text-center text-sm text-slate-400">
+                          No audit events found.
+                        </td>
+                      </tr>
+                    ) : (
+                      auditEvents.map((event, idx) => (
+                        <tr key={`${event.entry_hash}-${idx}`}>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm font-semibold text-slate-100">{event.event_type}</td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-300">{event.severity}</td>
+                          <td className="whitespace-nowrap px-6 py-4 text-xs text-slate-300">{event.entry_hash.slice(0, 16)}...</td>
+                          <td className="whitespace-nowrap px-6 py-4 text-xs text-slate-300">
+                            {event.anchored_tx_id ? (
+                              <a
+                                href={`${TESTNET_EXPLORER_TX_BASE}${event.anchored_tx_id}/`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-sky-300 underline-offset-2 hover:underline"
+                              >
+                                {`${event.anchored_tx_id.slice(0, 16)}...`}
+                              </a>
+                            ) : (
+                              "Not anchored"
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-300">{event.anchored_round ?? "-"}</td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-300">{new Date(event.created_at).toLocaleString()}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </>
         )}

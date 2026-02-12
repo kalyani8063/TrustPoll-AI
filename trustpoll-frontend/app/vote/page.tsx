@@ -10,21 +10,43 @@ interface Candidate {
   name: string;
 }
 
+interface VoteReceipt {
+  tx_id: string;
+  confirmed_round: number;
+  vote_hash: string;
+}
+
 export default function VotePage() {
   const router = useRouter();
-  const [wallet, setWallet] = useState("");
+  const [email, setEmail] = useState("");
+  const [sessionToken, setSessionToken] = useState("");
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [selectedCandidate, setSelectedCandidate] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [receipt, setReceipt] = useState<VoteReceipt | null>(null);
+  const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [hasVoted, setHasVoted] = useState(false);
+  const explorerBase = "https://testnet.explorer.perawallet.app/tx";
 
   useEffect(() => {
-    const storedWallet = localStorage.getItem("user_wallet");
-    if (!storedWallet) {
+    const storedEmail = localStorage.getItem("user_email");
+    const token = localStorage.getItem("session_token");
+    if (!storedEmail || !token) {
       router.push("/login");
       return;
     }
-    setWallet(storedWallet);
+    setEmail(storedEmail);
+    setSessionToken(token);
+    const storedReceipt = localStorage.getItem("vote_receipt");
+    if (storedReceipt) {
+      try {
+        setReceipt(JSON.parse(storedReceipt));
+      } catch {
+        localStorage.removeItem("vote_receipt");
+      }
+    }
 
     const loadCandidates = async () => {
       try {
@@ -40,10 +62,40 @@ export default function VotePage() {
       }
     };
 
+    const loadVoteStatus = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/vote/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.has_voted && data.tx_id) {
+          const nextReceipt: VoteReceipt = {
+            tx_id: data.tx_id,
+            confirmed_round: data.confirmed_round,
+            vote_hash: data.vote_hash,
+          };
+          setHasVoted(true);
+          setReceipt(nextReceipt);
+          localStorage.setItem("vote_receipt", JSON.stringify(nextReceipt));
+          setStatus({ type: "success", text: "You have already voted in this election." });
+        } else {
+          setHasVoted(false);
+        }
+      } catch {
+        // Ignore status fetch errors so the page remains usable.
+      }
+    };
+
     loadCandidates();
+    loadVoteStatus();
   }, [router]);
 
   const handleVote = async () => {
+    if (hasVoted) {
+      setStatus({ type: "error", text: "You have already voted in this election." });
+      return;
+    }
     if (!selectedCandidate) {
       setStatus({ type: "error", text: "Please select a candidate." });
       return;
@@ -61,13 +113,26 @@ export default function VotePage() {
     try {
       const voteRes = await fetch(`${API_BASE}/vote`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet, candidate_id: selectedCandidate }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${sessionToken}`,
+        },
+        body: JSON.stringify({ candidate_id: selectedCandidate }),
       });
 
       const voteData = await voteRes.json();
       if (voteRes.ok) {
-        setStatus({ type: "success", text: voteData.message || "Vote cast successfully." });
+        const nextReceipt: VoteReceipt = {
+          tx_id: voteData.tx_id,
+          confirmed_round: voteData.confirmed_round,
+          vote_hash: voteData.vote_hash,
+        };
+        localStorage.setItem("vote_receipt", JSON.stringify(nextReceipt));
+        setReceipt(nextReceipt);
+        setHasVoted(true);
+        setVerificationStatus(null);
+        const receiptText = `Vote confirmed in round ${voteData.confirmed_round}.`;
+        setStatus({ type: "success", text: receiptText });
         setSelectedCandidate(null);
       } else {
         setStatus({ type: "error", text: voteData.error || "Failed to cast vote." });
@@ -76,6 +141,25 @@ export default function VotePage() {
       setStatus({ type: "error", text: "Network error. Please try again." });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const verifyReceipt = async () => {
+    if (!receipt) return;
+    setVerifying(true);
+    setVerificationStatus(null);
+    try {
+      const res = await fetch(`${API_BASE}/verify/vote/${receipt.tx_id}`);
+      const data = await res.json();
+      if (res.ok && data.status === "SUCCESS") {
+        setVerificationStatus(`Verified on-chain at round ${data.confirmed_round}.`);
+      } else {
+        setVerificationStatus(data.error || "Verification failed.");
+      }
+    } catch {
+      setVerificationStatus("Network error while verifying receipt.");
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -94,9 +178,9 @@ export default function VotePage() {
               </p>
             </div>
             <div className="neon-border rounded-2xl bg-slate-900/70 px-4 py-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
-              Wallet
+              Email
               <div className="mt-2 text-sm font-medium normal-case text-slate-100">
-                {wallet || "Loading..."}
+                {email || "Loading..."}
               </div>
             </div>
           </div>
@@ -155,12 +239,52 @@ export default function VotePage() {
 
             <button
               onClick={handleVote}
-              disabled={loading || candidates.length === 0}
+              disabled={loading || candidates.length === 0 || hasVoted}
               className="glow-button mt-6 inline-flex w-full items-center justify-center rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? "Submitting..." : "Submit Vote"}
+              {loading ? "Submitting..." : hasVoted ? "Vote Already Recorded" : "Submit Vote"}
             </button>
           </div>
+
+          {receipt && (
+            <div className="glass-panel rounded-3xl p-8">
+              <h2 className="font-display text-2xl font-semibold text-slate-100">Vote Receipt</h2>
+              <p className="mt-2 text-sm text-slate-400">Use this receipt to independently verify your vote on-chain.</p>
+              <div className="mt-5 space-y-3 rounded-2xl border border-slate-700/70 bg-slate-900/50 p-4 text-sm text-slate-200">
+                <div>
+                  <span className="text-slate-400">Transaction ID:</span>{" "}
+                  <span className="break-all">{receipt.tx_id}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400">Confirmed Round:</span> {receipt.confirmed_round}
+                </div>
+                <div>
+                  <span className="text-slate-400">Vote Hash:</span>{" "}
+                  <span className="break-all">{receipt.vote_hash}</span>
+                </div>
+              </div>
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <button
+                  onClick={verifyReceipt}
+                  disabled={verifying}
+                  className="rounded-xl border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:border-sky-400 disabled:opacity-60"
+                >
+                  {verifying ? "Verifying..." : "Verify Receipt"}
+                </button>
+                <a
+                  href={`${explorerBase}/${receipt.tx_id}/`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-xl border border-sky-500/60 px-4 py-2 text-sm font-semibold text-sky-300 transition hover:bg-sky-500/10"
+                >
+                  Open In Explorer
+                </a>
+              </div>
+              {verificationStatus && (
+                <p className="mt-4 text-sm text-slate-300">{verificationStatus}</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

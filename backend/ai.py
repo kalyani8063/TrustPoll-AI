@@ -1,6 +1,6 @@
 from db import get_connection, release_connection
 
-def check_anomaly(wallet):
+def check_anomaly(identity_key):
     conn = get_connection()
     cur = conn.cursor()
 
@@ -10,7 +10,7 @@ def check_anomaly(wallet):
             FROM vote_attempts
             WHERE wallet = %s
             AND timestamp > NOW() - INTERVAL '1 minute'
-        """, (wallet,))
+        """, (identity_key,))
 
         count = cur.fetchone()[0]
     finally:

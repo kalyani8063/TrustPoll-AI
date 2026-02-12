@@ -5,12 +5,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-const WALLET_REGEX = /^WALLET_[A-Z0-9]{4,8}$/;
 
 export default function Home() {
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [wallet, setWallet] = useState("");
+  const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<1 | 2>(1);
   const [cooldown, setCooldown] = useState(0);
@@ -20,14 +19,9 @@ export default function Home() {
   const handleStartVerification = async () => {
     if (loading) return;
     const cleanEmail = email.trim();
-    const cleanWallet = wallet.trim().toUpperCase();
 
-    if (!cleanEmail || !cleanWallet) {
+    if (!cleanEmail) {
       setRegMessage({ text: "Please fill in all fields.", type: "error" });
-      return;
-    }
-    if (!WALLET_REGEX.test(cleanWallet)) {
-      setRegMessage({ text: "Wallet must follow format: WALLET_XXXX", type: "error" });
       return;
     }
 
@@ -38,7 +32,7 @@ export default function Home() {
       const res = await fetch(`${API_BASE}/register/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail, wallet: cleanWallet }),
+        body: JSON.stringify({ email: cleanEmail }),
       });
 
       const data = await res.json();
@@ -60,11 +54,15 @@ export default function Home() {
   const handleVerify = async () => {
     if (loading) return;
     const cleanEmail = email.trim();
-    const cleanWallet = wallet.trim().toUpperCase();
     const cleanOtp = otp.trim();
+    const cleanPassword = password.trim();
 
     if (!cleanOtp) {
       setRegMessage({ text: "Please enter the verification code.", type: "error" });
+      return;
+    }
+    if (cleanPassword.length < 8) {
+      setRegMessage({ text: "Password must be at least 8 characters.", type: "error" });
       return;
     }
 
@@ -75,7 +73,7 @@ export default function Home() {
       const res = await fetch(`${API_BASE}/register/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail, wallet: cleanWallet, otp: cleanOtp }),
+        body: JSON.stringify({ email: cleanEmail, otp: cleanOtp, password: cleanPassword }),
       });
 
       const data = await res.json();
@@ -124,8 +122,8 @@ export default function Home() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-4 shadow-sm">
-                <p className="text-sm font-semibold text-slate-100">Wallet-linked identity</p>
-                <p className="mt-1 text-sm text-slate-400">One wallet, one vote, enforced by policy.</p>
+                <p className="text-sm font-semibold text-slate-100">Email-verified identity</p>
+                <p className="mt-1 text-sm text-slate-400">One verified student, one vote.</p>
               </div>
               <div className="rounded-2xl border border-slate-700/70 bg-slate-900/70 p-4 shadow-sm">
                 <p className="text-sm font-semibold text-slate-100">AI anomaly monitoring</p>
@@ -141,7 +139,7 @@ export default function Home() {
                   New Student Registration
                 </h2>
                 <p className="mt-2 text-sm text-slate-400">
-                  Register your VIT email and wallet to access the ballot.
+                  Register your VIT email to access the ballot.
                 </p>
               </div>
 
@@ -171,22 +169,6 @@ export default function Home() {
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="wallet" className="block text-sm font-medium text-slate-300">
-                    Wallet Address
-                  </label>
-                  <input
-                    id="wallet"
-                    name="wallet"
-                    type="text"
-                    required
-                    placeholder="WALLET_XXXX"
-                    value={wallet}
-                    onChange={(e) => setWallet(e.target.value)}
-                    className="mt-2 block w-full rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
-                  />
-                  <p className="mt-2 text-xs text-slate-500">Use demo wallet format: WALLET_XXXX</p>
-                </div>
                 {step === 2 && (
                   <div>
                     <label htmlFor="otp" className="block text-sm font-medium text-slate-300">
@@ -201,6 +183,23 @@ export default function Home() {
                       placeholder="Enter 6-digit code"
                       value={otp}
                       onChange={(e) => setOtp(e.target.value)}
+                      className="mt-2 block w-full rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
+                    />
+                  </div>
+                )}
+                {step === 2 && (
+                  <div>
+                    <label htmlFor="password" className="block text-sm font-medium text-slate-300">
+                      Password
+                    </label>
+                    <input
+                      id="password"
+                      name="password"
+                      type="password"
+                      minLength={8}
+                      placeholder="Set account password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                       className="mt-2 block w-full rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm text-slate-100 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
                     />
                   </div>
